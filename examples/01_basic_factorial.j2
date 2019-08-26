@@ -1,0 +1,14 @@
+{# Calculate factorials! #}
+{% sqlvm %}
+@n := 11
+@accumulator := 1
+{{ label("loop_start") }}
+@accumulator := @accumulator * @n
+@n := @n - 1
+{# If @n is zero, we do nothing (which means we just keep executing).
+   If @n is non-zero, we jump to the start of the loop. #}
+IF(@n = 0, {{ nop() }}, {{ jump("loop_start") }})
+{# In this case, we could put this in the IF statement instead of the nop.
+   Recall that @out must be a string. #}
+@out := CONVERT(@accumulator,CHAR)
+{% endsqlvm %}

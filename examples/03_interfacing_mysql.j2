@@ -1,0 +1,20 @@
+{# SQLVM can also interface with your SQL database! #}
+{# Say we have a table:
+
+    CREATE TABLE ARRAY (`id` int, `n` int) ;
+    INSERT INTO ARRAY (`id`, `n`) VALUES (1, 1), (2, 3), (3, -5), (4, 8) ; 
+
+    We'll show how to get the sum of squares of elements in this table. #}
+{% sqlvm %}
+@idx := 0
+@res := 0
+{# The ( ) denote a SQL subquery. #}
+(SELECT @count := COUNT(*) FROM ARRAY)
+{{ label("loop_start") }}
+@idx := @idx + 1
+(SELECT @e := n FROM ARRAY WHERE id = @idx)
+@res := @res + @e * @e
+IF(@idx = @count, {{ jump("done") }}, {{ jump("loop_start") }})
+{{ label("done") }}
+@out := CONVERT(@res,CHAR)
+{% endsqlvm %}

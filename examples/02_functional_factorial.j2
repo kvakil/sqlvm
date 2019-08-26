@@ -1,0 +1,93 @@
+{# Calculate factorials, using "functions".
+   The calling convention here is ad-hoc. #}
+
+{# We can use Jinja2 variables and templating as well!
+   Think of Jinja2 templates as "macros" for SQLVM. #}
+{%- set MAX_MEMORY = 50 -%}
+
+{# Execute at most 2^10 steps of the program.  (Unfortunately, there is no
+   "execute until done", so some trial-and-error is needed here.) #}
+{{ set_lg_steps(10) }}
+
+{# We can also define "macros". Here we define a couple, corresponding to our
+   calling convention:
+
+    - @sp points to the lowest unused memory address (stack grows upwards),
+    - the return value of a function is stored in @rv,
+    - a function may clobber any @ variables EXCEPT @sp,
+    - the caller of a function pushes arguments onto the stack, and must
+      deallocate them.
+#}
+    
+{# In Jinja macros, you must end each statement with {{ statement() }}. #}
+{%- macro push(var) -%}
+{{ store(var, "@sp") }}
+{{ statement() }} @sp := @sp + 1
+{%- endmacro -%}
+
+{# For loads and stores, the memory index can either be a literal or a
+   variable. (It CANNOT be an expression--hence the use of a temporary
+   here.) #}
+{%- macro get_arg(var, n) -%}
+@get_arg_tmp := @sp-{{n+1}}
+{{ statement() }} {{ load(var, "@get_arg_tmp") }}
+{%- endmacro -%}
+
+{%- macro pop(var) -%}
+@sp := @sp - 1
+{{ statement() }} {{ load(var, "@sp") }}
+{%- endmacro -%}
+
+{%- macro call(label) -%}
+{{ push("@pc+2") }}
+{{ statement() }} {{ jump(label) }}
+{%- endmacro -%}
+
+{%- macro ret() -%}
+{{ pop("@pc") }}
+{%- endmacro -%}
+
+{% sqlvm %}
+
+{# Allocate memory! Here we allocate MAX_MEMORY "slots" of memory, which we use
+   for a stack. #}
+{{ alloc(MAX_MEMORY) }}
+
+{# Our stack pointer @sp will start at the bottom of memory. #}
+@sp := 1
+
+{{ label("main") }}
+        {# Call factorial(7) #}
+        {{ push(7) }}
+        {{ call("factorial") }}
+
+        {# Remove "7" from the stack #}
+        @sp := @sp - 1
+        {# Store @rv in our output. #}
+        @out := CONVERT(@rv,CHAR)
+
+        {# Labels are not really functions! We need to remember to exit the
+           program, or else we'll fall through to the code below. #}
+        {{ exit() }}
+
+{{ label("factorial") }}
+        {{ get_arg("@n", 1) }}
+        IF(@n = 0, {{ nop() }}, {{ jump("factorial_rec") }})
+        @rv := 1
+        {{ ret() }}
+
+        {{ label("factorial_rec") }}
+
+        {# Save @n onto the stack, as it will be clobbered by our recursive call. #}
+        {{ push("@n") }}
+
+        {# Recurse onto factorial(n-1) #}
+        {{ push("@n - 1") }}
+        {{ call("factorial") }}
+        @sp := @sp - 1
+
+        {# Get @n from the stack. #}
+        {{ pop("@n") }}
+        @rv := @rv * @n
+        {{ ret() }}
+{% endsqlvm %}
